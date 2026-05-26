@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gmail Clone</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        /* --- CSS Reset & Variables --- */
+        * {
+            margin: 0; padding: 0; box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        :root {
+            --primary-bg: #f6f8fc;
+            --sidebar-hover: #eaf1fb;
+            --sidebar-active: #d3e3fd;
+            --text-color: #1f1f1f;
+            --border-color: #e0e0e0;
+        }
+        body {
+            display: flex; flex-direction: column; height: 100vh;
+            overflow: hidden; background-color: var(--primary-bg); color: var(--text-color);
+        }
+        
+        /* --- Header Section --- */
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 16px; background-color: white; border-bottom: 1px solid var(--border-color); height: 64px;
+        }
+        .logo-area { display: flex; align-items: center; gap: 15px; font-size: 22px; font-weight: bold; color: #444; }
+        .search-bar { flex: 0 1 720px; margin: 0 20px; }
+        .search-bar input {
+            width: 100%; padding: 12px 20px; border: none; border-radius: 24px;
+            background-color: var(--primary-bg); font-size: 16px; outline: none; transition: background-color 0.2s;
+        }
+        .search-bar input:focus {
+            background-color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        
+        /* Profile & Logout styling */
+        .profile-area {
+            display: flex; align-items: center; gap: 12px; position: relative; cursor: pointer;
+        }
+        .user-tag { font-size: 14px; font-weight: 600; color: #5e5e5e; }
+        .avatar {
+            width: 40px; height: 40px; border-radius: 50%; background-color: #007fff;
+            color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;
+        }
+        .logout-btn {
+            padding: 6px 12px; background: white; border: 1px solid var(--border-color);
+            border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; color: #ea4335;
+        }
+        .logout-btn:hover { background: #fce8e6; }
+        
+        /* --- Main Layout Container --- */
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+        
+        /* --- Sidebar Panel --- */
+        aside { width: 256px; padding: 15px 8px; background-color: var(--primary-bg); }
+        .compose-btn {
+            display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-radius: 16px;
+            background-color: #c2e7ff; color: #001d35; font-weight: 600; border: none; margin-bottom: 16px;
+            cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: box-shadow 0.2s;
+        }
+        .compose-btn:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+        .sidebar-menu-item {
+            display: flex; justify-content: space-between; padding: 0 12px; height: 32px;
+            align-items: center; border-radius: 16px; cursor: pointer; margin-bottom: 4px; font-size: 14px;
+        }
+        .sidebar-menu-item.active { background-color: var(--sidebar-active); font-weight: bold; }
+        .sidebar-menu-item:hover:not(.active) { background-color: var(--sidebar-hover); }
+        
+        /* --- Email Viewing Canvas --- */
+        main {
+            flex: 1; background-color: white; margin-right: 16px; margin-bottom: 16px;
+            border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; overflow-y: auto;
+        }
+        .email-item {
+            display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border-color);
+            cursor: pointer; font-size: 14px; gap: 15px; position: relative;
+        }
+        .email-item:hover {
+            box-shadow: inset 1px 0 0 #dadce0, inset -1px 0 0 #dadce0, 0 1px 2px 0 rgba(60,64,67,.3); z-index: 1;
+        }
+        .email-item.unread { font-weight: bold; background-color: #f8f9fa; }
+        .email-sender { width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .email-content { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .email-subject { color: #1f1f1f; }
+        .email-snippet { color: #5e5e5e; font-weight: normal; }
+        .email-time { width: 80px; text-align: right; color: #5e5e5e; font-size: 12px; }
+        
+        /* Hoverable Trash Utility */
+        .delete-btn {
+            display: none; color: #ea4335; font-weight: bold; cursor: pointer; 
+            padding: 4px 8px; border-radius: 4px; font-size: 16px;
+        }
+        .email-item:hover .delete-btn { display: inline-block; }
+        .email-item:hover .email-time { display: none; }
+
+        /* --- View/Compose Popup Component --- */
+        .modal {
+            display: none; position: fixed; bottom: 0; right: 100px; width: 500px; height: 400px;
+            background-color: white; border-radius: 10px 10px 0 0; box-shadow: 0px 8px 24px rgba(0,0,0,0.2);
+            border: 1px solid var(--border-color); flex-direction: column; z-index: 10;
+        }
+        .modal-header {
+            background-color: var(--primary-bg); padding: 12px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; border-radius: 10px 10px 0 0;
+        }
+        .modal-close { cursor: pointer; font-size: 18px; }
+        .modal-body { padding: 15px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+        .modal-body input, .modal-body textarea { width: 100%; border: none; border-bottom: 1px solid var(--border-color); padding: 8px; outline: none; }
+        .modal-body textarea { flex: 1; resize: none; border-bottom: none; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-area"><span>☰</span><span style="color: #ea4335;">Gmail</span></div>
+        <div class="search-bar">
+            <input type="text" id="mail-search-input" placeholder="Search mail">
+        </div>
+        <div class="profile-area">
+            <span class="user-tag">{{ username }}</span>
+            <button class="logout-btn" onclick="handleLogout()">Sign out</button>
+            <div class="avatar">{{ username[0]|upper }}</div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <aside>
+            <button class="compose-btn" onclick="toggleCompose(true)">✏️ Compose</button>
+            <div id="folder-inbox" class="sidebar-menu-item active" onclick="switchFolder('inbox')">
+                <span>📥 Inbox</span>
+            </div>
+            <div id="folder-sent" class="sidebar-menu-item" onclick="switchFolder('sent')">
+                <span>📤 Sent</span>
+            </div>
+        </aside>
+
+        <main id="email-list"></main>
+    </div>
+
+    <div class="modal" id="email-modal">
+        <div class="modal-header">
+            <span id="modal-title">New Message</span>
+            <span class="modal-close" onclick="toggleCompose(false)">✕</span>
+        </div>
+        <div class="modal-body">
+            <input type="text" id="modal-to" placeholder="To">
+            <input type="text" id="modal-subject" placeholder="Subject">
+            <textarea id="modal-message" placeholder="Say something..."></textarea>
+        </div>
+    </div>
+
+    <script>
+        const modal = document.getElementById('email-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalTo = document.getElementById('modal-to');
+        const modalSubject = document.getElementById('modal-subject');
+        const modalMessage = document.getElementById('modal-message');
+        const searchInput = document.getElementById('mail-search-input');
+
+        const API_URL = "/api/emails"; 
+        let currentFolder = "inbox";
+
+        // Initialize WebSockets safely
+        const socket = io();
+
+        socket.on('db_changed', (data) => {
+            console.log("Real-time DB Update received:", data);
+            loadInbox(); 
+        });
+
+        async function loadInbox() {
+            try {
+                const response = await fetch(`${API_URL}?folder=${currentFolder}`);
+                
+                // Security check: if the server says unauthorized, bounce to auth panel
+                if (response.status === 401) {
+                    window.location.href = '/auth';
+                    return;
+                }
+
+                const emails = await response.json();
+                const listContainer = document.getElementById('email-list');
+                listContainer.innerHTML = ''; 
+
+                if (emails.length === 0) {
+                    listContainer.innerHTML = `<div style="padding: 20px; color: #5e5e5e;">Your ${currentFolder} directory is empty.</div>`;
+                    return;
+                }
+
+                emails.forEach(email => {
+                    const unreadClass = email.is_read === 0 ? 'unread' : '';
+                    const safeBody = email.body.replace(/['"`]/g, '\\$&');
+                    const safeSubject = email.subject.replace(/['"`]/g, '\\$&');
+
+                    listContainer.innerHTML += `
+                        <div id="email-row-${email.id}" class="email-item ${unreadClass}" onclick="viewEmail(${email.id}, '${email.sender}', '${safeSubject}', '${safeBody}')">
+                            <input type="checkbox" onclick="event.stopPropagation()">
+                            <span class="email-sender">${currentFolder === 'sent' ? 'To: ' + email.recipient : email.sender}</span>
+                            <div class="email-content">
+                                <span class="email-subject">${email.subject}</span> - 
+                                <span class="email-snippet">${email.body}</span>
+                            </div>
+                            <div class="email-time">${email.timestamp.split(' ')[1] || email.timestamp}</div>
+                            <div class="delete-btn" onclick="deleteEmail(event, ${email.id})">🗑️</div>
+                        </div>`;
+                });
+
+                executeFrontendFilter();
+            } catch (error) {
+                console.error("Could not fetch emails:", error);
+            }
+        }
+
+        function switchFolder(folderName) {
+            currentFolder = folderName;
+            document.querySelectorAll('.sidebar-menu-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`folder-${folderName}`).classList.add('active');
+            searchInput.value = ''; 
+            loadInbox();
+        }
+
+        async function viewEmail(id, sender, subject, message) {
+            modalTitle.innerText = `From: ${sender}`;
+            modalTo.style.display = "none";
+            modalSubject.value = subject;
+            modalSubject.disabled = true;
+            modalMessage.value = message;
+            modalMessage.disabled = true;
+            modal.style.display = 'flex';
+
+            const emailRow = document.getElementById(`email-row-${id}`);
+            if (emailRow) emailRow.classList.remove('unread');
+
+            try {
+                await fetch(`${API_URL}/${id}/read`, { method: 'PUT' });
+            } catch (error) {
+                console.error("Failed to update status:", error);
+            }
+        }
+
+        async function sendEmail() {
+            const emailData = {
+                recipient: modalTo.value,
+                subject: modalSubject.value,
+                body: modalMessage.value
+            };
+
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(emailData)
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    toggleCompose(false);
+                } else {
+                    // Alert user if recipient username doesn't exist
+                    alert(data.error || "Failed to send email.");
+                }
+            } catch (error) {
+                alert("Network error. Failed to send email.");
+            }
+        }
+
+        async function deleteEmail(event, id) {
+            event.stopPropagation(); 
+            if (!confirm("Are you sure you want to delete this email?")) return;
+
+            try {
+                await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+            } catch (error) {
+                console.error("Failed to delete item:", error);
+            }
+        }
+
+        function executeFrontendFilter() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const emailRows = document.querySelectorAll('.email-item');
+
+            emailRows.forEach(row => {
+                const sender = row.querySelector('.email-sender').innerText.toLowerCase();
+                const subject = row.querySelector('.email-subject').innerText.toLowerCase();
+                const snippet = row.querySelector('.email-content').innerText.toLowerCase();
+
+                if (sender.includes(searchTerm) || subject.includes(searchTerm) || snippet.includes(searchTerm)) {
+                    row.style.display = 'flex';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        async function handleLogout() {
+            try {
+                const res = await fetch('/api/logout', { method: 'POST' });
+                if (res.ok) window.location.href = '/auth';
+            } catch (err) {
+                console.error("Logout request failed:", err);
+            }
+        }
+
+        searchInput.addEventListener('input', executeFrontendFilter);
+
+        function toggleCompose(show) {
+            if (show) {
+                modalTitle.innerText = "New Message";
+                modalTo.value = ""; modalTo.style.display = "block";
+                modalSubject.value = ""; modalSubject.disabled = false;
+                modalMessage.value = ""; modalMessage.disabled = false;
+                
+                if (!document.getElementById('send-btn')) {
+                    const sendBtn = document.createElement('button');
+                    sendBtn.id = 'send-btn'; sendBtn.innerText = "Send";
+                    sendBtn.style = "padding: 8px 16px; background: #0b57d0; color: white; border: none; border-radius: 100px; cursor: pointer; font-weight: bold; align-self: flex-start;";
+                    sendBtn.onclick = sendEmail;
+                    document.querySelector('.modal-body').appendChild(sendBtn);
+                }
+                modal.style.display = 'flex';
+            } else {
+                modal.style.display = 'none';
+                const btn = document.getElementById('send-btn');
+                if (btn) btn.remove();
+            }
+        }
+
+        window.onload = loadInbox;
+    </script>
+</body>
+</html>

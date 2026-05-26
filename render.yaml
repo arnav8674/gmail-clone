@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: gmail-clone
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0

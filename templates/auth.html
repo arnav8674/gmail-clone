@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gmail Clone - Welcome</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { display: flex; height: 100vh; background-color: #f6f8fc; align-items: center; justify-content: center; }
+        .auth-card { background: white; padding: 40px; border-radius: 12px; border: 1px solid #e0e0e0; width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .brand { font-size: 28px; font-weight: bold; color: #ea4335; text-align: center; margin-bottom: 8px; }
+        .title { font-size: 20px; text-align: center; margin-bottom: 24px; color: #1f1f1f; }
+        .input-group { margin-bottom: 16px; }
+        .input-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #444; }
+        .input-group input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; outline: none; font-size: 15px; }
+        .input-group input:focus { border-color: #0b57d0; box-shadow: 0 0 0 2px rgba(11,87,208,0.2); }
+        .btn { width: 100%; padding: 12px; background: #0b57d0; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 15px; margin-top: 10px; }
+        .btn:hover { background: #0842a0; }
+        .toggle-link { font-size: 14px; text-align: center; margin-top: 20px; color: #5e5e5e; cursor: pointer; }
+        .toggle-link span { color: #0b57d0; font-weight: 600; }
+        .error-msg { color: #b00020; font-size: 14px; text-align: center; margin-bottom: 15px; display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="auth-card">
+        <div class="brand">Gmail</div>
+        <div class="title" id="auth-title">Sign in to your account</div>
+        <div class="error-msg" id="error-box"></div>
+        
+        <div class="input-group">
+            <label>Username / Email</label>
+            <input type="text" id="username" placeholder="name@gmail.com">
+        </div>
+        <div class="input-group">
+            <label>Password</label>
+            <input type="password" id="password" placeholder="••••••••">
+        </div>
+
+        <button class="btn" id="submit-btn" onclick="handleSubmit()">Next</button>
+        <div class="toggle-link" id="toggle-view" onclick="toggleAuthMode()">New to Clone? <span>Create account</span></div>
+    </div>
+
+<script>
+    let isLoginMode = true;
+    const errorBox = document.getElementById('error-box');
+
+    function toggleAuthMode() {
+        isLoginMode = !isLoginMode;
+        document.getElementById('auth-title').innerText = isLoginMode ? "Sign in to your account" : "Create your account";
+        document.getElementById('submit-btn').innerText = isLoginMode ? "Next" : "Register";
+        document.getElementById('toggle-view').innerHTML = isLoginMode ? "New to Clone? <span>Create account</span>" : "Have an account? <span>Sign in instead</span>";
+        errorBox.style.display = 'none';
+    }
+
+    async function handleSubmit() {
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        errorBox.style.display = 'none';
+
+        const endpoint = isLoginMode ? '/api/login' : '/api/signup';
+
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                window.location.href = '/'; // Forward inside app space
+            } else {
+                errorBox.innerText = data.error || "An error occurred.";
+                errorBox.style.display = 'block';
+            }
+        } catch (err) {
+            errorBox.innerText = "Network transmission failed.";
+            errorBox.style.display = 'block';
+        }
+    }
+</script>
+</body>
+</html>
