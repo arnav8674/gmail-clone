@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO, join_room, emit
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -16,7 +16,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+# ✅ IMPORTANT: force gevent mode
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # ================= MODELS =================
 
@@ -33,32 +35,37 @@ class Email(db.Model):
     body = db.Column(db.Text)
     is_read = db.Column(db.Boolean, default=False)
 
+# ================= ROUTES =================
+
+@app.route('/')
+def home():
+    return send_from_directory('.', 'index.html')
+
 # ================= AUTH =================
 
 @app.route('/api/signup', methods=['POST'])
 def signup():
     data = request.json
-    username = data.get('username')
-    password = data.get('password')
 
-    if not username or not password:
+    if not data or not data.get('username') or not data.get('password'):
         return jsonify({'error': 'Missing fields'}), 400
 
-    if User.query.filter_by(username=username).first():
+    if User.query.filter_by(username=data['username']).first():
         return jsonify({'error': 'User exists'}), 400
 
-    hashed_pw = generate_password_hash(password)
+    hashed_pw = generate_password_hash(data['password'])
 
-    user = User(username=username, password=hashed_pw)
+    user = User(username=data['username'], password=hashed_pw)
     db.session.add(user)
     db.session.commit()
 
-    session['username'] = username
+    session['username'] = user.username
     return jsonify({'message': 'Signup success'})
 
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.json
+
     user = User.query.filter_by(username=data.get('username')).first()
 
     if user and check_password_hash(user.password, data.get('password')):
@@ -118,7 +125,7 @@ def send_email():
     db.session.add(email)
     db.session.commit()
 
-    # Send only to recipient
+    # ✅ FIXED: send only to recipient
     socketio.emit('new_email', {
         'sender': email.sender,
         'subject': email.subject,
@@ -146,7 +153,7 @@ def mark_read(id):
 # ================= SOCKET =================
 
 @socketio.on('connect')
-def connect():
+def handle_connect():
     if 'username' in session:
         join_room(session['username'])
 
