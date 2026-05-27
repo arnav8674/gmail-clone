@@ -165,7 +165,9 @@
         let currentFolder = "inbox";
 
         // Initialize WebSockets safely
-        const socket = io();
+        const socket = io({
+    transports: ["websocket"]
+});
 
         socket.on('db_changed', (data) => {
             console.log("Real-time DB Update received:", data);
