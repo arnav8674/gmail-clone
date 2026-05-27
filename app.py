@@ -1,13 +1,13 @@
 import os
 from flask import Flask, request, jsonify, session, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
-from flask_socketio import SocketIO, join_room, emit
+from flask_socketio import SocketIO, join_room
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key')
 
-# Fix Render DB URL
+# Fix PostgreSQL URL (Render bug fix)
 db_url = os.environ.get('DATABASE_URL')
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -17,7 +17,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# ✅ IMPORTANT: force gevent mode
+# ✅ FORCE GEVENT (CRITICAL)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # ================= MODELS =================
@@ -35,7 +35,7 @@ class Email(db.Model):
     body = db.Column(db.Text)
     is_read = db.Column(db.Boolean, default=False)
 
-# ================= ROUTES =================
+# ================= ROUTE =================
 
 @app.route('/')
 def home():
@@ -112,20 +112,23 @@ def send_email():
 
     data = request.json
 
+    if not data or not data.get('recipient'):
+        return jsonify({'error': 'Invalid data'}), 400
+
     if not User.query.filter_by(username=data['recipient']).first():
         return jsonify({'error': 'Recipient not found'}), 400
 
     email = Email(
         sender=session['username'],
         recipient=data['recipient'],
-        subject=data['subject'],
-        body=data['body']
+        subject=data.get('subject', ''),
+        body=data.get('body', '')
     )
 
     db.session.add(email)
     db.session.commit()
 
-    # ✅ FIXED: send only to recipient
+    # ✅ SEND ONLY TO RECEIVER
     socketio.emit('new_email', {
         'sender': email.sender,
         'subject': email.subject,
